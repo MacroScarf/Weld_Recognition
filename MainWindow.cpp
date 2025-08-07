@@ -497,8 +497,10 @@ void MainWindow::onPushButtonClicked() {
 		int o_nEndPostureArraySize = 0;
 		m_ptrKit->Math_trans_vector_to_posture(pArcBoxView->o_dEndPoint, pArcBoxView->o_dEndTanVector, dFaceVector, 1, &o_dEndPosture, &o_nEndPostureArraySize);
 		
-		ULONG uRobotID = 0;
-		GetObjIDByName(32, _T("KUKA-KR16-2"), uRobotID);
+
+		ULONG uID = 3;
+		m_ptrKit->PQAPIGetActiveEngine(&uID);
+
 
 		// 正确分配内存
 		double* i_dPosition = new double[12]; // 分配12个元素的数组（6个起点+6个终点）
@@ -526,7 +528,7 @@ void MainWindow::onPushButtonClicked() {
 		LONG bToolEndPosture = 0;
 		ULONG uPathID = 0;
 		
-		m_ptrKit->Path_insert_from_point(uRobotID, 2, i_dPosition, 1, nInstruct, dVelocity, dSpeedPercent, nApproach, sPathname, sGroupName, uCoordianteID, bToolEndPosture, &uPathID, false);
+		m_ptrKit->Path_insert_from_point(uID, 2, i_dPosition, 1, nInstruct, dVelocity, dSpeedPercent, nApproach, sPathname, sGroupName, uCoordianteID, bToolEndPosture, &uPathID, false);
 		
 		// 释放分配的内存
 		delete[] i_dPosition;
