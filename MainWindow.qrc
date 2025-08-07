@@ -1,0 +1,17 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Images/compile.png</file>
+        <file>Images/open.png</file>
+        <file>Images/save.png</file>
+        <file>Images/simulate.png</file>
+        <file>Images/insertpath.png</file>
+	<file>Images/closefile.png</file>
+	<file>Images/import3d.png</file>
+	<file>Images/measure.png</file>
+	<file>Images/arcbox.png</file>
+	<file>Images/alignpart.png</file>
+	<file>Images/generatepath.png</file>
+	<file>Images/post.png</file>
+	<file>Images/getpathpoint.png</file>	
+   </qresource>
+</RCC>
