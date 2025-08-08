@@ -43,6 +43,7 @@ private:
 	QAction* m_measureAction;
 	QAction* m_arcboxAction;
 	QAction* m_arcboxAction2; 
+	QAction* m_weldRecognize;
 	QAction* m_alignpartAction;
 	QAction* m_generatepathAction;
 	QAction* m_postAction; 
@@ -71,6 +72,7 @@ protected slots:
 	void Import3DObj();
 	void Measure();
 	void ArcBox();
+	void WeldRecognize();
 	void ArcBox2();
 	void PickUpFace();
 	void onPushButtonClicked();

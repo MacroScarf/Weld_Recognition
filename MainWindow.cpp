@@ -43,6 +43,7 @@ void MainWindow::InitAction()
 	m_arcboxAction= new QAction(QIcon(":/Images/arcbox.png"), QString::fromLocal8Bit("三维球"), this);
 
 	m_arcboxAction2 = new QAction(QIcon(":/Images/generatepath.png"), QString::fromLocal8Bit("测试生成轨迹"), this);
+	m_weldRecognize = new QAction(QIcon(":/Images/generatepath.png"), QString::fromLocal8Bit("焊缝识别"), this);
 
 	m_alignpartAction = new QAction(QIcon(":/Images/alignpart.png"), QString::fromLocal8Bit("三点校准"), this);
 	m_generatepathAction= new QAction(QIcon(":/Images/generatepath.png"), QString::fromLocal8Bit("生成轨迹"), this);
@@ -58,7 +59,10 @@ void MainWindow::InitAction()
 	connect(m_import3dAction, SIGNAL(triggered()), this, SLOT(Import3DObj()));
 	connect(m_measureAction, SIGNAL(triggered()), this, SLOT(Measure()));
 	connect(m_arcboxAction, SIGNAL(triggered()), this, SLOT(ArcBox()));
+
 	connect(m_arcboxAction2, SIGNAL(triggered()), this, SLOT(ArcBox2()));
+	connect(m_weldRecognize, SIGNAL(triggered()), this, SLOT(WeldRecognize()));
+
 	connect(m_alignpartAction, SIGNAL(triggered()), this, SLOT(AlignPart()));
 	connect(m_generatepathAction, SIGNAL(triggered()), this, SLOT(Generatepath()));
 	connect(m_postAction, SIGNAL(triggered()), this, SLOT(Post()));
@@ -87,6 +91,7 @@ void MainWindow::InitMenu()
 	pFile->addAction(m_measureAction);
 	pFile->addAction(m_arcboxAction);
 	pFile->addAction(m_arcboxAction2);
+	pFile->addAction(m_weldRecognize);
 	pFile->addAction(m_alignpartAction);
 	pFile->addAction(m_postAction);
 	pFile->addSeparator();
@@ -111,6 +116,7 @@ void MainWindow::InitToolBar()
 	ui->toolBar->addAction(m_measureAction);
 	ui->toolBar->addAction(m_arcboxAction);
 	ui->toolBar->addAction(m_arcboxAction2);
+	ui->toolBar->addAction(m_weldRecognize);
 	ui->toolBar->addAction(m_alignpartAction);
 	ui->toolBar->addAction(m_postAction);
 	ui->toolBar->addSeparator();
@@ -419,6 +425,46 @@ void MainWindow::ArcBox()
 	m_ptrKit->Doc_start_module(strCMD);
 }
 
+void MainWindow::WeldRecognize() {
+
+	/*VARIANT vNamePara;
+	vNamePara.parray = NULL;
+	VARIANT vIDPara;
+	vIDPara.parray = NULL;
+	m_ptrKit->Doc_get_obj_bytype(225, &vNamePara, &vIDPara);*/
+	
+	ULONG uID = 0;
+	GetObjIDByName(225, L"out", uID);
+
+	eLoopType eType= E_OUTLOOP;
+	WCHAR* o_wcharEdgeNames = nullptr;
+	m_ptrKit->Part_get_edge_by_name(uID, eType, &o_wcharEdgeNames);
+
+	// 显示所有边的名字
+	if (o_wcharEdgeNames != nullptr) {
+		// 将WCHAR*转换为QString
+		QString edgeNames = QString::fromWCharArray(o_wcharEdgeNames);
+		
+		// 检查字符串内容是否为空
+		if (!edgeNames.isEmpty()) {
+			QString edgeNamesText = QString::fromLocal8Bit("边的名字列表：\n");
+			
+			// 如果边名字是以某种分隔符分隔的，我们可以进一步处理
+			// 这里先直接显示原始字符串
+			edgeNamesText += edgeNames;
+			
+			QMessageBox::information(this, QString::fromLocal8Bit("边名字信息"), edgeNamesText, QMessageBox::Ok);
+		} else {
+			QMessageBox::information(this, QString::fromLocal8Bit("边名字信息"), QString::fromLocal8Bit("边名字为空"), QMessageBox::Ok);
+		}
+	} else {
+		QMessageBox::information(this, QString::fromLocal8Bit("边名字信息"), QString::fromLocal8Bit("未找到边信息"), QMessageBox::Ok);
+	}
+
+	m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharEdgeNames);
+
+
+}
 void MainWindow::ArcBox2()
 {
 	// 创建TestArcBoxView实例
@@ -498,7 +544,8 @@ void MainWindow::onPushButtonClicked() {
 		m_ptrKit->Math_trans_vector_to_posture(pArcBoxView->o_dEndPoint, pArcBoxView->o_dEndTanVector, dFaceVector, 1, &o_dEndPosture, &o_nEndPostureArraySize);
 		
 
-		ULONG uID = 3;
+		//获取当前工作的设备的id
+		ULONG uID = 0;
 		m_ptrKit->PQAPIGetActiveEngine(&uID);
 
 
@@ -533,7 +580,7 @@ void MainWindow::onPushButtonClicked() {
 		// 释放分配的内存
 		delete[] i_dPosition;
 		
-		// 如果API提供了释放方法，使用API的方法释放内存
+
 		if (o_dStartPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dStartPosture);
 		if (o_dEndPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dEndPosture);
 	}
