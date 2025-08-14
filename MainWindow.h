@@ -11,6 +11,7 @@
 #include "PQKitCallback.h"
 #include "TestArcBoxView.h"
 #include "..\include\C++\PQKitError.h"
+#include <MainWindow.h>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -46,15 +47,26 @@ public:
         QVector<QString> faceNames; // 存储包含这条边的面名称
     };
 
-    struct WeldPair {
-        QString edgeName;
-        QString faceName;
+    struct EdgeGroup {
+        QString groupName;           // 组名
+        QVector<EdgeInfo> edges;    // 该组下的所有边
     };
 
-    struct FaceInfo {
-        QString name;
-        QVector<double> normal; // size 3: [dx, dy, dz]
+	struct FaceInfo {
+		QString name;
+		QVector<double> normal; // size 3: [dx, dy, dz]
+	};
+
+    struct FaceGroup {
+        QString groupName;           // 组名
+        QVector<FaceInfo> faces;    // 该组下的所有面
     };
+
+    struct WeldPair {
+        EdgeInfo edgeInfo;    // 存储完整的边信息
+        FaceInfo faceInfo;    // 存储完整的面信息
+    };
+
 
 private:
     Ui::MainWindow *ui;
@@ -98,8 +110,8 @@ protected slots:
 	void Measure();
 	void ArcBox();
 	void WeldRecognize();
-    void GetAllFaces(ULONG uID, QVector<FaceInfo>& outFaces);
-	void GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges);
+	void GetAllFacesGrouped(ULONG uID, QVector<FaceGroup>& outFaceGroups);
+	void GetAllEdgesGrouped(ULONG uID, QVector<EdgeGroup>& outEdgeGroups);
 	void ArcBox2();
 	void PickUpFace();
 	void onPushButtonClicked();

@@ -445,59 +445,85 @@ void MainWindow::WeldRecognize() {
         return;
     }
     
-    QVector<EdgeInfo> edges;
-    GetAllEdges(uID, edges);
+        QVector<EdgeGroup> edgeGroups;
+        GetAllEdgesGrouped(uID, edgeGroups);
+        
+    QVector<FaceGroup> faceGroups;
+    GetAllFacesGrouped(uID, faceGroups);
 
-    QVector<FaceInfo> faces;
-    GetAllFaces(uID, faces);
-
-    // 打印所有边的名称
-    fprintf(stderr, "=== 所有边的名称 ===\n");
-    for (int i = 0; i < edges.size(); i++) {
-        fprintf(stderr, "边[%d]: %s\n", i, edges[i].name.toLocal8Bit().constData());
+    // 打印所有边的名称（按组分组）
+    fprintf(stderr, "=== 所有边的名称（按组分组） ===\n");
+    for (int i = 0; i < edgeGroups.size(); i++) {
+        fprintf(stderr, "边组[%d]: %s\n", i, edgeGroups[i].groupName.toLocal8Bit().constData());
+        for (int j = 0; j < edgeGroups[i].edges.size(); j++) {
+            fprintf(stderr, "  边[%d]: %s\n", j, edgeGroups[i].edges[j].name.toLocal8Bit().constData());
+        }
     }
-    fprintf(stderr, "总共找到 %d 条边\n\n", edges.size());
-
-    // 打印所有面的名称
-    fprintf(stderr, "=== 所有面的名称 ===\n");
-    for (int i = 0; i < faces.size(); i++) {
-        fprintf(stderr, "面[%d]: %s\n", i, faces[i].name.toLocal8Bit().constData());
+    
+    int totalEdges = 0;
+        for (const EdgeGroup& group : edgeGroups) {
+        totalEdges += group.edges.size();
     }
-    fprintf(stderr, "总共找到 %d 个面\n\n", faces.size());
+    fprintf(stderr, "总共找到 %d 条边\n\n", totalEdges);
 
-    // 存储找到的焊缝对
-    QVector<WeldPair> weldPairs;
+    // 打印所有面的名称（按组分组）
+    fprintf(stderr, "=== 所有面的名称（按组分组） ===\n");
+    for (int i = 0; i < faceGroups.size(); i++) {
+        fprintf(stderr, "面组[%d]: %s\n", i, faceGroups[i].groupName.toLocal8Bit().constData());
+        for (int j = 0; j < faceGroups[i].faces.size(); j++) {
+            fprintf(stderr, "  面[%d]: %s\n", j, faceGroups[i].faces[j].name.toLocal8Bit().constData());
+        }
+    }
+    
+    int totalFaces = 0;
+    for (const FaceGroup& group : faceGroups) {
+        totalFaces += group.faces.size();
+    }
+    fprintf(stderr, "总共找到 %d 个面\n\n", totalFaces);
 
-	// 遍历每条边
-	for (const EdgeInfo& edge : edges) {
-		// 遍历每个面
-		for (const FaceInfo& face : faces) {
-			//如果这个面属于这条边的faceNames数组，就跳过这个面
-			if (edge.faceNames.contains(face.name)) {
-			 continue;
+        // 存储找到的焊缝对
+        QVector<WeldPair> weldPairs;
+
+	// 遍历每个边组
+	for (const EdgeGroup& edgeGroup : edgeGroups) {
+		// 遍历该组中的每条边
+		for (const EdgeInfo& edge : edgeGroup.edges) {
+			// 只遍历与边组名不同的面组
+			for (const FaceGroup& faceGroup : faceGroups) {
+				// 检查面组名是否与边组名相同
+				if (faceGroup.groupName == edgeGroup.groupName) {
+					continue; // 跳过同组名的面组
+				}
+				
+				// 遍历该组中的每个面
+				for (const FaceInfo& face : faceGroup.faces) {
+					//如果这个面属于这条边的faceNames数组，就跳过这个面
+					if (edge.faceNames.contains(face.name)) {
+						continue;
+					}
+					//调用Part_check_edge_in_face_by_name接口检查这个边和面是否满足"边不属于面但边在面上"的条件
+					LPWSTR faceName = (LPWSTR)face.name.utf16();
+					LPWSTR edgeName = (LPWSTR)edge.name.utf16();
+					long a = 1;
+					long* bIn = &a;
+					m_ptrKit->Part_check_edge_in_face_by_name(faceName, edgeName, bIn);
+					if (*bIn) {
+						//找到匹配的边-面对，添加到结果中
+						WeldPair weldPair;
+						weldPair.edgeInfo = edge;
+						weldPair.faceInfo = face;
+						weldPairs.push_back(weldPair);
+						fprintf(stderr, "找到了一个边和面的匹配！\n");
+						break; // 结束对这个边的遍历，继续下一个边
+					}
+				}
 			}
-			 //调用Part_check_edge_in_face_by_name接口检查这个边和面是否满足“边不属于面但边在面上”的条件
-			LPWSTR faceName = (LPWSTR)face.name.utf16();
-			LPWSTR edgeName = (LPWSTR)edge.name.utf16();
-			long a = 1;
-			long* bIn = &a;
-			m_ptrKit->Part_check_edge_in_face_by_name(faceName, edgeName, bIn);
-			fprintf(stderr, "指针bIn现在指向的值是 %ld\n", *bIn);
-			if (*bIn) {
-				 //找到匹配的边-面对，添加到结果中
-				 WeldPair weldPair;
-				 weldPair.edgeName = edge.name;
-				 weldPair.faceName = face.name;
-				 weldPairs.push_back(weldPair);
-				 break; // 结束对这个边的遍历，继续下一个边
-			}
-
 		}
 	}
-	fprintf(stderr, "焊缝识别完成！\n");
-    fprintf(stderr, "焊缝识别完成，共找到 %d 个焊缝对\n", weldPairs.size());
-    for (const WeldPair& pair : weldPairs) {
-        fprintf(stderr, "边: %s, 面: %s\n", pair.edgeName.toLocal8Bit().constData(), pair.faceName.toLocal8Bit().constData());
+        fprintf(stderr, "焊缝识别完成！\n");
+        fprintf(stderr, "焊缝识别完成，共找到 %d 个焊缝对\n", weldPairs.size());
+        for (const WeldPair& pair : weldPairs) {
+            fprintf(stderr, "边: %s, 面: %s\n", pair.edgeInfo.name.toLocal8Bit().constData(), pair.faceInfo.name.toLocal8Bit().constData());
     }
 }
 
@@ -584,47 +610,15 @@ void MainWindow::onPushButtonClicked() {
 	}
 }
 
-void MainWindow::GetAllFaces(ULONG uID, QVector<FaceInfo>& outFaces) {
-    WCHAR* o_wcharFaceNames = nullptr;
-    m_ptrKit->Part_get_face_by_name(uID, &o_wcharFaceNames);
-    if (o_wcharFaceNames != nullptr) {
-        QString faceNames = QString::fromWCharArray(o_wcharFaceNames);
-        if (!faceNames.isEmpty()) {
-            QStringList parts = faceNames.split(QRegularExpression(",|，"), QString::SkipEmptyParts);
-            for (QString& name : parts) {
-                name = name.trimmed();
-            }
 
-            for (const QString& name : parts) {
-                if (name.isEmpty()) continue;
 
-                CComBSTR faceNameBSTR(name.toStdWString().c_str());
 
-                // 由于批量获取没有拾取点，使用(0,0,0)作为查询点
-                double dx = 0.0, dy = 0.0, dz = 0.0;
-                m_ptrKit->Part_get_face_normal_by_name(faceNameBSTR, 0.0, 0.0, 0.0, &dx, &dy, &dz);
-
-                FaceInfo faceInfo;
-                faceInfo.name = name;
-                faceInfo.normal.resize(3);
-                faceInfo.normal[0] = dx;
-                faceInfo.normal[1] = dy;
-                faceInfo.normal[2] = dz;
-
-                outFaces.push_back(faceInfo);
-            }
-        }
-    }
-
-    m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharFaceNames);
-}
-void MainWindow::GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges) {
-
+void MainWindow::GetAllEdgesGrouped(ULONG uID, QVector<EdgeGroup>& outEdgeGroups) {
 	eLoopType eType = E_OUTLOOP;
 	WCHAR* o_wcharEdgeNames = nullptr;
 	m_ptrKit->Part_get_edge_by_name(uID, eType, &o_wcharEdgeNames);
 
-    // 解析所有边名并逐一获取每条边的参数，存入 outEdges
+	// 解析所有边名并逐一获取每条边的参数，按组名分组存入 outEdgeGroups
 	if (o_wcharEdgeNames != nullptr) {
 		QString edgeNames = QString::fromWCharArray(o_wcharEdgeNames);
 		if (!edgeNames.isEmpty()) {
@@ -633,8 +627,16 @@ void MainWindow::GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges) {
 				name = name.trimmed();
 			}
 
+			// 用于存储组名到组索引的映射
+			QMap<QString, int> groupIndexMap;
+
 			for (const QString& name : parts) {
 				if (name.isEmpty()) continue;
+
+				// 解析边名称，提取组名和标签
+				QStringList nameParts = name.split("#");
+				QString groupName = nameParts.size() > 1 ? nameParts[0] : "default";
+				QString edgeLabel = nameParts.size() > 1 ? nameParts[1] : name;
 
 				CComBSTR edgeNameBSTR(name.toStdWString().c_str());
 
@@ -691,8 +693,6 @@ void MainWindow::GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges) {
 
 				// 处理面信息
 				if (o_wcharFaceNames != nullptr) {
-					// 假设返回的是以逗号分隔的面名称字符串
-					// 如果返回的是数组，需要根据实际API文档调整
 					QString faceNames = QString::fromWCharArray(o_wcharFaceNames);
 					if (!faceNames.isEmpty()) {
 						QStringList faceParts = faceNames.split(QRegularExpression(",|，"), QString::SkipEmptyParts);
@@ -700,24 +700,28 @@ void MainWindow::GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges) {
 							faceName = faceName.trimmed();
 							if (!faceName.isEmpty()) {
 								edgeInfo.faceNames.push_back(faceName);
-								// 使用fprintf打印每条边对应的面名字
-								fprintf(stdout, "边 '%s' 对应的面: '%s'\n", name.toLocal8Bit().constData(), faceName.toLocal8Bit().constData());
 							}
 						}
-					} else {
-						// 面数组为空时的调试提示
-						fprintf(stdout, "边 '%s' 对应的面数组为空\n", name.toLocal8Bit().constData());
 					}
 					// 释放面名称内存
 					if (o_wcharFaceNames) {
 						m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharFaceNames);
 					}
-				} else {
-					// o_wcharFaceNames 为 nullptr 时的调试提示
-					fprintf(stdout, "边 '%s' 获取面信息失败，o_wcharFaceNames 为 nullptr\n", name.toLocal8Bit().constData());
 				}
 
-                outEdges.push_back(edgeInfo);
+				// 按组名分组存储
+				if (!groupIndexMap.contains(groupName)) {
+					// 创建新组
+					EdgeGroup newGroup;
+					newGroup.groupName = groupName;
+					newGroup.edges.clear();
+					outEdgeGroups.push_back(newGroup);
+					groupIndexMap[groupName] = outEdgeGroups.size() - 1;
+				}
+				
+				// 将边添加到对应的组中
+				int groupIndex = groupIndexMap[groupName];
+				outEdgeGroups[groupIndex].edges.push_back(edgeInfo);
 
                 if (startPoint)      m_ptrKit->PQAPIFreeArray((LONG_PTR*)startPoint);
                 if (endPoint)        m_ptrKit->PQAPIFreeArray((LONG_PTR*)endPoint);
@@ -727,7 +731,74 @@ void MainWindow::GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges) {
 		}
 	}
 
+	// 按组名数字排序
+	std::sort(outEdgeGroups.begin(), outEdgeGroups.end(),
+		[](const EdgeGroup& a, const EdgeGroup& b) {
+			return a.groupName.toInt() < b.groupName.toInt();
+		});
+
 	m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharEdgeNames);
+}
+
+void MainWindow::GetAllFacesGrouped(ULONG uID, QVector<FaceGroup>& outFaceGroups) {
+    WCHAR* o_wcharFaceNames = nullptr;
+    m_ptrKit->Part_get_face_by_name(uID, &o_wcharFaceNames);
+    if (o_wcharFaceNames != nullptr) {
+        QString faceNames = QString::fromWCharArray(o_wcharFaceNames);
+        if (!faceNames.isEmpty()) {
+            QStringList parts = faceNames.split(QRegularExpression(",|，"), QString::SkipEmptyParts);
+			for (QString& name : parts) {
+				name = name.trimmed();
+			}
+
+            // 用于存储组名到组索引的映射
+            QMap<QString, int> groupIndexMap;
+
+				for (const QString& name : parts) {
+					if (name.isEmpty()) continue;
+
+                // 解析面名称，提取组名和标签
+					QStringList nameParts = name.split("#");
+                QString groupName = nameParts.size() > 1 ? nameParts[0] : "default";
+                QString faceLabel = nameParts.size() > 1 ? nameParts[1] : name;
+
+                CComBSTR faceNameBSTR(name.toStdWString().c_str());
+
+                // 由于批量获取没有拾取点，使用(0,0,0)作为查询点
+                double dx = 0.0, dy = 0.0, dz = 0.0;
+                m_ptrKit->Part_get_face_normal_by_name(faceNameBSTR, 0.0, 0.0, 0.0, &dx, &dy, &dz);
+
+                FaceInfo faceInfo;
+                faceInfo.name = name;
+                faceInfo.normal.resize(3);
+                faceInfo.normal[0] = dx;
+                faceInfo.normal[1] = dy;
+                faceInfo.normal[2] = dz;
+
+                // 按组名分组存储
+                if (!groupIndexMap.contains(groupName)) {
+                    // 创建新组
+                    FaceGroup newGroup;
+                    newGroup.groupName = groupName;
+                    newGroup.faces.clear();
+                    outFaceGroups.push_back(newGroup);
+                    groupIndexMap[groupName] = outFaceGroups.size() - 1;
+                }
+                
+                // 将面添加到对应的组中
+                int groupIndex = groupIndexMap[groupName];
+                outFaceGroups[groupIndex].faces.push_back(faceInfo);
+            }
+        }
+    }
+
+	// 按组名数字排序
+	std::sort(outFaceGroups.begin(), outFaceGroups.end(),
+		[](const FaceGroup& a, const FaceGroup& b) {
+			return a.groupName.toInt() < b.groupName.toInt();
+		});
+
+								m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharFaceNames);
 }
 
 void MainWindow::ArcBox2()
