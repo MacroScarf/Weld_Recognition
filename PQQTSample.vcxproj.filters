@@ -53,33 +53,9 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PQKitInitThread.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="PQKitCallback.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="InsertPathDlg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TestArcBoxView.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="MainWindow.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="PQKitCallback.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="PQKitInitThread.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="InsertPathDlg.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="TestArcBoxView.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>
@@ -95,21 +71,42 @@
     <QtUic Include="MainWindow.ui">
       <Filter>Form Files</Filter>
     </QtUic>
-    <QtUic Include="InsertPathDlg.ui">
-      <Filter>Form Files</Filter>
-    </QtUic>
-    <QtUic Include="TestArcBoxView.ui">
-      <Filter>Form Files</Filter>
-    </QtUic>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="MainWindow.qrc">
       <Filter>Resource Files</Filter>
     </QtRcc>
+    <None Include="Images\alignpart.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Images\arcbox.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Images\closefile.png">
+      <Filter>Resource Files</Filter>
+    </None>
     <None Include="Images\compile.png">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="Images\generatepath.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Images\getpathpoint.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Images\import3d.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Images\insertpath.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Images\measure.png">
+      <Filter>Resource Files</Filter>
+    </None>
     <None Include="Images\open.png">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Images\post.png">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="Images\save.png">
@@ -120,6 +117,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include=".\PQQTSample_resource.rc" />
+    <ResourceCompile Include="C:\Users\86150\AppData\Roaming\PQKit_SDK\Sample\PQQTSample\PQQTSample_resource.rc" />
   </ItemGroup>
 </Project>

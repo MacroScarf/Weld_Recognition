@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QMessageBox>
 #include "TestArcBoxView.h"
+#include <QRegularExpression>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -151,8 +152,8 @@ void MainWindow::InitPQKit()
 void MainWindow::OnInitializeKitThread()
 {
 	//initialize pqkit
-	CComBSTR bsName = L"18379115061";
-	CComBSTR bsPWD = L"115061";
+	CComBSTR bsName = L"18959262282";
+	CComBSTR bsPWD = L"262282";
 	HRESULT hr = m_ptrKit->pq_InitPlatformComponent(m_ptrKitCallback, (int)(this->winId()), bsName, bsPWD);
 	if (S_OK != hr)
 	{
@@ -427,44 +428,308 @@ void MainWindow::ArcBox()
 
 void MainWindow::WeldRecognize() {
 
-	/*VARIANT vNamePara;
+	VARIANT vNamePara;
 	vNamePara.parray = NULL;
 	VARIANT vIDPara;
 	vIDPara.parray = NULL;
-	m_ptrKit->Doc_get_obj_bytype(225, &vNamePara, &vIDPara);*/
-	
+	m_ptrKit->Doc_get_obj_bytype(225, &vNamePara, &vIDPara);
 	ULONG uID = 0;
-	GetObjIDByName(225, L"out", uID);
+    // 从 vIDPara 的第一个元素获取 uID
+    if (vIDPara.parray != NULL && vIDPara.parray->rgsabound[0].cElements > 0) {
+        ULONG* bufID = nullptr;
+        SafeArrayAccessData(vIDPara.parray, (void**)&bufID);
+        uID = bufID[0];
+        SafeArrayUnaccessData(vIDPara.parray);
+    } else {
+        QMessageBox::information(this, QString::fromLocal8Bit("提示"), QString::fromLocal8Bit("未找到有效的对象ID"), QMessageBox::Ok);
+        return;
+    }
+    
+    QVector<EdgeInfo> edges;
+    GetAllEdges(uID, edges);
 
-	eLoopType eType= E_OUTLOOP;
+    QVector<FaceInfo> faces;
+    GetAllFaces(uID, faces);
+
+    // 打印所有边的名称
+    fprintf(stderr, "=== 所有边的名称 ===\n");
+    for (int i = 0; i < edges.size(); i++) {
+        fprintf(stderr, "边[%d]: %s\n", i, edges[i].name.toLocal8Bit().constData());
+    }
+    fprintf(stderr, "总共找到 %d 条边\n\n", edges.size());
+
+    // 打印所有面的名称
+    fprintf(stderr, "=== 所有面的名称 ===\n");
+    for (int i = 0; i < faces.size(); i++) {
+        fprintf(stderr, "面[%d]: %s\n", i, faces[i].name.toLocal8Bit().constData());
+    }
+    fprintf(stderr, "总共找到 %d 个面\n\n", faces.size());
+
+    // 存储找到的焊缝对
+    QVector<WeldPair> weldPairs;
+
+	// 遍历每条边
+	for (const EdgeInfo& edge : edges) {
+		// 遍历每个面
+		for (const FaceInfo& face : faces) {
+			//如果这个面属于这条边的faceNames数组，就跳过这个面
+			if (edge.faceNames.contains(face.name)) {
+			 continue;
+			}
+			 //调用Part_check_edge_in_face_by_name接口检查这个边和面是否满足“边不属于面但边在面上”的条件
+			LPWSTR faceName = (LPWSTR)face.name.utf16();
+			LPWSTR edgeName = (LPWSTR)edge.name.utf16();
+			long a = 1;
+			long* bIn = &a;
+			m_ptrKit->Part_check_edge_in_face_by_name(faceName, edgeName, bIn);
+			fprintf(stderr, "指针bIn现在指向的值是 %ld\n", *bIn);
+			if (*bIn) {
+				 //找到匹配的边-面对，添加到结果中
+				 WeldPair weldPair;
+				 weldPair.edgeName = edge.name;
+				 weldPair.faceName = face.name;
+				 weldPairs.push_back(weldPair);
+				 break; // 结束对这个边的遍历，继续下一个边
+			}
+
+		}
+	}
+	fprintf(stderr, "焊缝识别完成！\n");
+    fprintf(stderr, "焊缝识别完成，共找到 %d 个焊缝对\n", weldPairs.size());
+    for (const WeldPair& pair : weldPairs) {
+        fprintf(stderr, "边: %s, 面: %s\n", pair.edgeName.toLocal8Bit().constData(), pair.faceName.toLocal8Bit().constData());
+    }
+}
+
+
+void MainWindow::onPushButtonClicked() {
+
+	// 按钮点击处理
+	qDebug() << QString::fromLocal8Bit("按钮被点击");
+	emit pArcBoxView->selectionChanged(pArcBoxView->m_faceName, pArcBoxView->m_lineName);
+	//开始处理并生成轨迹
+	if (pArcBoxView->EdgeIfReady && pArcBoxView->FaceIfReady) {
+		double dFaceVector[3] = { *pArcBoxView->DX,*pArcBoxView->DY,*pArcBoxView->DZ };
+		double* o_dStartPosture = nullptr;
+		int o_nStartPostureArraySize = 0;
+		m_ptrKit->Math_trans_vector_to_posture(pArcBoxView->o_dStartPoint, pArcBoxView->o_dStartTanVector, dFaceVector, 1, &o_dStartPosture, &o_nStartPostureArraySize);
+		double* o_dEndPosture = nullptr;
+		int o_nEndPostureArraySize = 0;
+		m_ptrKit->Math_trans_vector_to_posture(pArcBoxView->o_dEndPoint, pArcBoxView->o_dEndTanVector, dFaceVector, 1, &o_dEndPosture, &o_nEndPostureArraySize);
+
+
+		//获取当前工作的设备的id
+		ULONG uID = 0;
+		m_ptrKit->PQAPIGetActiveEngine(&uID);
+
+
+		// 正确分配内存
+		double* i_dPosition = new double[12]; // 分配12个元素的数组（6个起点+6个终点）
+		for (int i = 0; i < 6; i++) {
+			i_dPosition[i] = o_dStartPosture[i];
+		}
+		for (int i = 0; i < 6; i++) {
+			i_dPosition[6 + i] = o_dEndPosture[i];
+		}
+
+		int nInstruct[2] = { 1,1 };
+		double dVelocity[2] = { 200.0,200 };
+		double dSpeedPercent[2] = { 100.0,100 };
+		int nApproach[2] = { -1,-1 };
+
+		// 生成唯一的路径名称，避免轨迹被覆盖
+		static int pathCounter = 0;
+		pathCounter++;
+		QString uniquePathName = QString("testPath_%1").arg(pathCounter);
+		QString uniqueGroupName = QString("testGroupPath_%1").arg(pathCounter);
+
+		CComBSTR sPathname = uniquePathName.toStdWString().c_str();
+		CComBSTR sGroupName = uniqueGroupName.toStdWString().c_str();
+		ULONG uCoordianteID = 0;
+		LONG bToolEndPosture = 0;
+		ULONG uPathID = 0;
+
+		m_ptrKit->Path_insert_from_point(uID, 2, i_dPosition, 1, nInstruct, dVelocity, dSpeedPercent, nApproach, sPathname, sGroupName, uCoordianteID, bToolEndPosture, &uPathID, false);
+
+		// 释放分配的内存
+		delete[] i_dPosition;
+
+
+		if (o_dStartPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dStartPosture);
+		if (o_dEndPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dEndPosture);
+	}
+	else {
+		QMessageBox::information(pArcBoxView, "PQKit Info", QString::fromLocal8Bit("请先拾取面或线。"), QMessageBox::Ok);
+	}
+
+	// 关闭窗口并释放资源
+	if (pArcBoxView) {
+		// 释放内存
+		if (pArcBoxView->DX) {
+			delete pArcBoxView->DX;
+			pArcBoxView->DX = nullptr;
+		}
+		if (pArcBoxView->DY) {
+			delete pArcBoxView->DY;
+			pArcBoxView->DY = nullptr;
+		}
+		if (pArcBoxView->DZ) {
+			delete pArcBoxView->DZ;
+			pArcBoxView->DZ = nullptr;
+		}
+
+		pArcBoxView->close();
+		delete pArcBoxView;
+		pArcBoxView = nullptr;
+	}
+}
+
+void MainWindow::GetAllFaces(ULONG uID, QVector<FaceInfo>& outFaces) {
+    WCHAR* o_wcharFaceNames = nullptr;
+    m_ptrKit->Part_get_face_by_name(uID, &o_wcharFaceNames);
+    if (o_wcharFaceNames != nullptr) {
+        QString faceNames = QString::fromWCharArray(o_wcharFaceNames);
+        if (!faceNames.isEmpty()) {
+            QStringList parts = faceNames.split(QRegularExpression(",|，"), QString::SkipEmptyParts);
+            for (QString& name : parts) {
+                name = name.trimmed();
+            }
+
+            for (const QString& name : parts) {
+                if (name.isEmpty()) continue;
+
+                CComBSTR faceNameBSTR(name.toStdWString().c_str());
+
+                // 由于批量获取没有拾取点，使用(0,0,0)作为查询点
+                double dx = 0.0, dy = 0.0, dz = 0.0;
+                m_ptrKit->Part_get_face_normal_by_name(faceNameBSTR, 0.0, 0.0, 0.0, &dx, &dy, &dz);
+
+                FaceInfo faceInfo;
+                faceInfo.name = name;
+                faceInfo.normal.resize(3);
+                faceInfo.normal[0] = dx;
+                faceInfo.normal[1] = dy;
+                faceInfo.normal[2] = dz;
+
+                outFaces.push_back(faceInfo);
+            }
+        }
+    }
+
+    m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharFaceNames);
+}
+void MainWindow::GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges) {
+
+	eLoopType eType = E_OUTLOOP;
 	WCHAR* o_wcharEdgeNames = nullptr;
 	m_ptrKit->Part_get_edge_by_name(uID, eType, &o_wcharEdgeNames);
 
-	// 显示所有边的名字
+    // 解析所有边名并逐一获取每条边的参数，存入 outEdges
 	if (o_wcharEdgeNames != nullptr) {
-		// 将WCHAR*转换为QString
 		QString edgeNames = QString::fromWCharArray(o_wcharEdgeNames);
-		
-		// 检查字符串内容是否为空
 		if (!edgeNames.isEmpty()) {
-			QString edgeNamesText = QString::fromLocal8Bit("边的名字列表：\n");
-			
-			// 如果边名字是以某种分隔符分隔的，我们可以进一步处理
-			// 这里先直接显示原始字符串
-			edgeNamesText += edgeNames;
-			
-			QMessageBox::information(this, QString::fromLocal8Bit("边名字信息"), edgeNamesText, QMessageBox::Ok);
-		} else {
-			QMessageBox::information(this, QString::fromLocal8Bit("边名字信息"), QString::fromLocal8Bit("边名字为空"), QMessageBox::Ok);
+			QStringList parts = edgeNames.split(QRegularExpression(",|，"), QString::SkipEmptyParts);
+			for (QString& name : parts) {
+				name = name.trimmed();
+			}
+
+			for (const QString& name : parts) {
+				if (name.isEmpty()) continue;
+
+				CComBSTR edgeNameBSTR(name.toStdWString().c_str());
+
+				int startPointCount = 0;
+				int endPointCount = 0;
+				double* startPoint = nullptr;
+				double* endPoint = nullptr;
+				double* startTanVector = nullptr;
+				int startVectorSize = 0;
+				double* endTanVector = nullptr;
+				int endVectorSize = 0;
+
+				m_ptrKit->Part_get_extreme_point_of_edge_by_name(
+					edgeNameBSTR,
+					&startPoint, &startPointCount,
+					&startTanVector, &startVectorSize,
+					&endPoint, &endPointCount,
+					&endTanVector, &endVectorSize);
+
+                EdgeInfo edgeInfo;
+                edgeInfo.name = name;
+                edgeInfo.startPointCount = startPointCount;
+                edgeInfo.endPointCount = endPointCount;
+                edgeInfo.startVectorSize = startVectorSize;
+                edgeInfo.endVectorSize = endVectorSize;
+
+                if (startPoint && startPointCount > 0) {
+                    edgeInfo.startPoint.resize(startPointCount);
+                    for (int i = 0; i < startPointCount; ++i) {
+                        edgeInfo.startPoint[i] = startPoint[i];
+                    }
+                }
+                if (endPoint && endPointCount > 0) {
+                    edgeInfo.endPoint.resize(endPointCount);
+                    for (int i = 0; i < endPointCount; ++i) {
+                        edgeInfo.endPoint[i] = endPoint[i];
+                    }
+                }
+                if (startTanVector && startVectorSize > 0) {
+                    edgeInfo.startTanVector.resize(startVectorSize);
+                    for (int i = 0; i < startVectorSize; ++i) {
+                        edgeInfo.startTanVector[i] = startTanVector[i];
+                    }
+                }
+                if (endTanVector && endVectorSize > 0) {
+                    edgeInfo.endTanVector.resize(endVectorSize);
+                    for (int i = 0; i < endVectorSize; ++i) {
+                        edgeInfo.endTanVector[i] = endTanVector[i];
+                    }
+                }
+
+				WCHAR* o_wcharFaceNames = nullptr;
+				m_ptrKit->Part_get_face_of_edge_by_name(edgeNameBSTR, &o_wcharFaceNames);
+
+				// 处理面信息
+				if (o_wcharFaceNames != nullptr) {
+					// 假设返回的是以逗号分隔的面名称字符串
+					// 如果返回的是数组，需要根据实际API文档调整
+					QString faceNames = QString::fromWCharArray(o_wcharFaceNames);
+					if (!faceNames.isEmpty()) {
+						QStringList faceParts = faceNames.split(QRegularExpression(",|，"), QString::SkipEmptyParts);
+						for (QString& faceName : faceParts) {
+							faceName = faceName.trimmed();
+							if (!faceName.isEmpty()) {
+								edgeInfo.faceNames.push_back(faceName);
+								// 使用fprintf打印每条边对应的面名字
+								fprintf(stdout, "边 '%s' 对应的面: '%s'\n", name.toLocal8Bit().constData(), faceName.toLocal8Bit().constData());
+							}
+						}
+					} else {
+						// 面数组为空时的调试提示
+						fprintf(stdout, "边 '%s' 对应的面数组为空\n", name.toLocal8Bit().constData());
+					}
+					// 释放面名称内存
+					if (o_wcharFaceNames) {
+						m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharFaceNames);
+					}
+				} else {
+					// o_wcharFaceNames 为 nullptr 时的调试提示
+					fprintf(stdout, "边 '%s' 获取面信息失败，o_wcharFaceNames 为 nullptr\n", name.toLocal8Bit().constData());
+				}
+
+                outEdges.push_back(edgeInfo);
+
+                if (startPoint)      m_ptrKit->PQAPIFreeArray((LONG_PTR*)startPoint);
+                if (endPoint)        m_ptrKit->PQAPIFreeArray((LONG_PTR*)endPoint);
+                if (startTanVector)  m_ptrKit->PQAPIFreeArray((LONG_PTR*)startTanVector);
+                if (endTanVector)    m_ptrKit->PQAPIFreeArray((LONG_PTR*)endTanVector);
+			}
 		}
-	} else {
-		QMessageBox::information(this, QString::fromLocal8Bit("边名字信息"), QString::fromLocal8Bit("未找到边信息"), QMessageBox::Ok);
 	}
 
 	m_ptrKit->PQAPIFree((LONG_PTR*)o_wcharEdgeNames);
-
-
 }
+
 void MainWindow::ArcBox2()
 {
 	// 创建TestArcBoxView实例
@@ -526,88 +791,6 @@ void MainWindow::ArcBox2()
 		center.x() - pArcBoxView->width() / 2,
 		center.y() - pArcBoxView->height() / 2
 	);
-}
-
-void MainWindow::onPushButtonClicked() {
-
-	// 按钮点击处理
-	qDebug() << QString::fromLocal8Bit("按钮被点击");
-	emit pArcBoxView->selectionChanged(pArcBoxView->m_faceName, pArcBoxView->m_lineName);
-	//开始处理并生成轨迹
-	if (pArcBoxView->EdgeIfReady && pArcBoxView->FaceIfReady) {
-		double dFaceVector[3] = {*pArcBoxView->DX,*pArcBoxView->DY,*pArcBoxView->DZ };
-		double* o_dStartPosture = nullptr;
-		int o_nStartPostureArraySize = 0;
-		m_ptrKit->Math_trans_vector_to_posture(pArcBoxView->o_dStartPoint, pArcBoxView->o_dStartTanVector, dFaceVector, 1, &o_dStartPosture, &o_nStartPostureArraySize);
-		double* o_dEndPosture = nullptr;
-		int o_nEndPostureArraySize = 0;
-		m_ptrKit->Math_trans_vector_to_posture(pArcBoxView->o_dEndPoint, pArcBoxView->o_dEndTanVector, dFaceVector, 1, &o_dEndPosture, &o_nEndPostureArraySize);
-		
-
-		//获取当前工作的设备的id
-		ULONG uID = 0;
-		m_ptrKit->PQAPIGetActiveEngine(&uID);
-
-
-		// 正确分配内存
-		double* i_dPosition = new double[12]; // 分配12个元素的数组（6个起点+6个终点）
-		for (int i = 0; i < 6; i++) {
-			i_dPosition[i] = o_dStartPosture[i];
-		}
-		for (int i = 0; i < 6; i++) {
-			i_dPosition[6 + i] = o_dEndPosture[i];
-		}
-		
-		int nInstruct[2] = {1,1};
-		double dVelocity[2] = {200.0,200};
-		double dSpeedPercent[2] = {100.0,100};
-		int nApproach[2] = { -1,-1 };
-		
-		// 生成唯一的路径名称，避免轨迹被覆盖
-		static int pathCounter = 0;
-		pathCounter++;
-		QString uniquePathName = QString("testPath_%1").arg(pathCounter);
-		QString uniqueGroupName = QString("testGroupPath_%1").arg(pathCounter);
-		
-		CComBSTR sPathname = uniquePathName.toStdWString().c_str();
-		CComBSTR sGroupName = uniqueGroupName.toStdWString().c_str();
-		ULONG uCoordianteID = 0;
-		LONG bToolEndPosture = 0;
-		ULONG uPathID = 0;
-		
-		m_ptrKit->Path_insert_from_point(uID, 2, i_dPosition, 1, nInstruct, dVelocity, dSpeedPercent, nApproach, sPathname, sGroupName, uCoordianteID, bToolEndPosture, &uPathID, false);
-		
-		// 释放分配的内存
-		delete[] i_dPosition;
-		
-
-		if (o_dStartPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dStartPosture);
-		if (o_dEndPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dEndPosture);
-	}
-	else {
-		QMessageBox::information(pArcBoxView, "PQKit Info", QString::fromLocal8Bit("请先拾取面或线。"), QMessageBox::Ok);
-	}
-	
-	// 关闭窗口并释放资源
-	if (pArcBoxView) {
-		// 释放内存
-		if (pArcBoxView->DX) {
-			delete pArcBoxView->DX;
-			pArcBoxView->DX = nullptr;
-		}
-		if (pArcBoxView->DY) {
-			delete pArcBoxView->DY;
-			pArcBoxView->DY = nullptr;
-		}
-		if (pArcBoxView->DZ) {
-			delete pArcBoxView->DZ;
-			pArcBoxView->DZ = nullptr;
-		}
-		
-		pArcBoxView->close();
-		delete pArcBoxView;
-		pArcBoxView = nullptr;
-	}
 }
 
 

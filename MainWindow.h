@@ -5,6 +5,8 @@
 #include <QMainWindow>
 #include <QCloseEvent>
 #include <QMessageBox>
+#include <QVector>
+#include <QString>
 
 #include "PQKitCallback.h"
 #include "TestArcBoxView.h"
@@ -30,6 +32,29 @@ public:
 	void ShowPQKitWindown();
 	void GetObjIDByName(int i_nType, std::wstring i_wsName, ULONG &o_uID);
 	void GetFirstPointOfPath(ULONG i_ulPathID, ULONG& o_ulPointIDe);
+
+    struct EdgeInfo {
+        QString name;
+        int startPointCount = 0;
+        int endPointCount = 0;
+        int startVectorSize = 0;
+        int endVectorSize = 0;
+        QVector<double> startPoint;
+        QVector<double> endPoint;
+        QVector<double> startTanVector;
+        QVector<double> endTanVector;
+        QVector<QString> faceNames; // 存储包含这条边的面名称
+    };
+
+    struct WeldPair {
+        QString edgeName;
+        QString faceName;
+    };
+
+    struct FaceInfo {
+        QString name;
+        QVector<double> normal; // size 3: [dx, dy, dz]
+    };
 
 private:
     Ui::MainWindow *ui;
@@ -73,6 +98,8 @@ protected slots:
 	void Measure();
 	void ArcBox();
 	void WeldRecognize();
+    void GetAllFaces(ULONG uID, QVector<FaceInfo>& outFaces);
+	void GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges);
 	void ArcBox2();
 	void PickUpFace();
 	void onPushButtonClicked();
