@@ -522,9 +522,70 @@ void MainWindow::WeldRecognize() {
 	}
         fprintf(stderr, "焊缝识别完成！\n");
         fprintf(stderr, "焊缝识别完成，共找到 %d 个焊缝对\n", weldPairs.size());
+		int index = 0;
+		static int pathCounter = 0;
+		pathCounter++;
         for (const WeldPair& pair : weldPairs) {
             fprintf(stderr, "边: %s, 面: %s\n", pair.edgeInfo.name.toLocal8Bit().constData(), pair.faceInfo.name.toLocal8Bit().constData());
+
+			double dFaceVector[3] = { pair.faceInfo.normal[0], pair.faceInfo.normal[1], pair.faceInfo.normal[2] };
+			double edgeStartPoint[3] = { pair.edgeInfo.startPoint[0], pair.edgeInfo.startPoint[1], pair.edgeInfo.startPoint[2] };
+			double edgeEndPoint[3] = { pair.edgeInfo.endPoint[0], pair.edgeInfo.endPoint[1], pair.edgeInfo.endPoint[2] };
+			double edgeStartTanVector[3] = { pair.edgeInfo.startTanVector[0], pair.edgeInfo.startTanVector[1], pair.edgeInfo.startTanVector[2] };
+			double edgeEndTanVector[3] = { pair.edgeInfo.endTanVector[0], pair.edgeInfo.endTanVector[1], pair.edgeInfo.endTanVector[2] };
+
+			double* o_dStartPosture = nullptr;
+			int o_nStartPostureArraySize = 0;
+			m_ptrKit->Math_trans_vector_to_posture(edgeStartPoint, edgeStartTanVector, dFaceVector, 1, &o_dStartPosture, &o_nStartPostureArraySize);
+			double* o_dEndPosture = nullptr;
+			int o_nEndPostureArraySize = 0;
+			m_ptrKit->Math_trans_vector_to_posture(edgeEndPoint, edgeEndTanVector, dFaceVector, 1, &o_dEndPosture, &o_nEndPostureArraySize);
+
+
+			//获取当前工作的设备的id
+			ULONG uID = 0;
+			m_ptrKit->PQAPIGetActiveEngine(&uID);
+
+
+			// 正确分配内存
+			double* i_dPosition = new double[12]; // 分配12个元素的数组（6个起点+6个终点）
+			for (int i = 0; i < 6; i++) {
+				i_dPosition[i] = o_dStartPosture[i];
+			}
+			for (int i = 0; i < 6; i++) {
+				i_dPosition[6 + i] = o_dEndPosture[i];
+			}
+
+			int nInstruct[2] = { 1,1 };
+			double dVelocity[2] = { 200.0,200 };
+			double dSpeedPercent[2] = { 100.0,100 };
+			int nApproach[2] = { -1,-1 };
+
+			// 生成唯一的路径名称，避免轨迹被覆盖
+
+			
+			index++;
+			QString uniquePathName = QString("testPath_%1").arg(index);
+			QString uniqueGroupName = QString("testWeldPath_%1").arg(pathCounter);
+
+			CComBSTR sPathname = uniquePathName.toStdWString().c_str();
+			CComBSTR sGroupName = uniqueGroupName.toStdWString().c_str();
+			ULONG uCoordianteID = 0;
+			LONG bToolEndPosture = 0;
+			ULONG uPathID = 0;
+
+			m_ptrKit->Path_insert_from_point(uID, 2, i_dPosition, 1, nInstruct, dVelocity, dSpeedPercent, nApproach, sPathname, sGroupName, uCoordianteID, bToolEndPosture, &uPathID, false);
+
+			// 释放分配的内存
+			delete[] i_dPosition;
+
+
+			if (o_dStartPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dStartPosture);
+			if (o_dEndPosture) m_ptrKit->PQAPIFreeArray((LONG_PTR*)o_dEndPosture);
     }
+
+
+
 }
 
 
