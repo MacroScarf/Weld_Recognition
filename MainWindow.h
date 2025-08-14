@@ -112,6 +112,8 @@ protected slots:
 	void WeldRecognize();
 	void GetAllFacesGrouped(ULONG uID, QVector<FaceGroup>& outFaceGroups);
 	void GetAllEdgesGrouped(ULONG uID, QVector<EdgeGroup>& outEdgeGroups);
+	void GetAllEdges(ULONG uID, QVector<EdgeInfo>& outEdges);
+	void GetAllFaces(ULONG uID, QVector<FaceInfo>& outFaces);
 	void ArcBox2();
 	void PickUpFace();
 	void onPushButtonClicked();
